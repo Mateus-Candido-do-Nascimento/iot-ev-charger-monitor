@@ -203,3 +203,5 @@ Se o emulador continuar com problemas:
 
 **Agora você sabe como configurar o emulador! Tente mudar o Graphics para Software primeiro.** 🚀
 
+
+

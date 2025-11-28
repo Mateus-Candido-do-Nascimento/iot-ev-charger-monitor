@@ -166,3 +166,5 @@ emulator-5554    device
 
 **Vamos tentar editar o arquivo de configuração primeiro!** 🚀
 
+
+

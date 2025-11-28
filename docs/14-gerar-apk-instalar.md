@@ -255,3 +255,5 @@ Depois de instalar:
 
 **Agora você pode instalar o app no celular sem precisar de emulador ou depuração USB!** ✅
 
+
+

@@ -12,7 +12,7 @@ Abra um **NOVO terminal** (PowerShell ou CMD) e execute:
 
 ```bash
 # Navegar até a pasta do projeto
-cd "C:\Users\mateus\OneDrive - Instituto Presbiteriano Mackenzie\iot\iot-ev-charger-monitor\smart-charger\mobile_app"
+
 
 # Limpar cache do Flutter
 flutter clean
@@ -131,4 +131,5 @@ Se o problema persistir, pode ser:
 ---
 
 **Tente a Solução 1 primeiro - geralmente resolve!** 🚀
+
 

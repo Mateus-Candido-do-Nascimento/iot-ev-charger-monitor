@@ -120,3 +120,5 @@ Para mais detalhes, veja: `docs/10-erro-emulador-startup.md`
 
 **Tente a Solução 1 primeiro - geralmente resolve!** 🚀
 
+
+

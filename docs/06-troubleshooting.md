@@ -352,3 +352,5 @@ flutter pub get
 - Troubleshooting oficial: https://docs.flutter.dev/get-started/install/windows#troubleshooting
 - Stack Overflow Flutter: https://stackoverflow.com/questions/tagged/flutter
 
+
+

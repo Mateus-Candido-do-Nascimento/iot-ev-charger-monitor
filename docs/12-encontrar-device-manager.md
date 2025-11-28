@@ -140,3 +140,5 @@ Se o Device Manager não aparecer ou der muito trabalho:
 
 **Tente primeiro verificar se o Android SDK está instalado!** 🚀
 
+
+

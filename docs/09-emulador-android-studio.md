@@ -418,3 +418,5 @@ Agora que o emulador está funcionando:
 
 **Agora você pode testar o app no emulador! 🚀**
 
+
+
