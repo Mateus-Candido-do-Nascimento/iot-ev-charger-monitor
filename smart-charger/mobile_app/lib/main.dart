@@ -111,6 +111,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     super.dispose();
   }
 
+<<<<<<< HEAD
   // ============================================================
   // CONEXÃO MQTT
   // ============================================================
@@ -123,6 +124,20 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
     // Configura TLS
     client!.secure = true;
+=======
+  // Conectar ao HiveMQ
+  void _connectToMqtt() async {
+    client = MqttServerClient.withPort(
+      '76231e3f3c29478fb36525c03a0507ba.s1.eu.hivemq.cloud',
+      'flutter_client_${DateTime.now().millisecondsSinceEpoch}',
+      8883,
+    );
+    
+    client!.secure = true;
+    client!.port = 8883;
+    final context = SecurityContext.defaultContext;
+    client!.securityContext = context;
+>>>>>>> 878d04be79f231e53ef63c99c5527147f1e8eb97
     client!.setProtocolV311();
     client!.keepAlivePeriod = 60;
 
@@ -133,19 +148,45 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
     client!.onConnected = _onConnected;
     client!.onDisconnected = _onDisconnected;
+<<<<<<< HEAD
 
+=======
+  
+    
+    // Credenciais
+>>>>>>> 878d04be79f231e53ef63c99c5527147f1e8eb97
     final connMessage = MqttConnectMessage()
         .withClientIdentifier(clientId)
         .startClean()
         .withWillQos(MqttQos.atLeastOnce);
 
     client!.connectionMessage = connMessage;
+<<<<<<< HEAD
 
     try {
       final result = await client!.connect(username, password);
 
       if (result == null ||
           result.state != MqttConnectionState.connected) {
+=======
+    
+    final status = await client!.connect('mateus', 'Mateus6615');
+
+    if (status?.state == MqttConnectionState.connected) {
+      print('Conectado com sucesso!');
+    } else {
+      print('Falha na conexão: ${status?.state}');
+      client!.disconnect();
+      return;
+}
+
+      
+      // Aguardar um pouco para a conexão estabelecer
+      await Future.delayed(const Duration(seconds: 2);
+      
+      if (client!.connectionStatus!.state == MqttConnectionState.connected) {
+        print('✅ Conectado ao MQTT!');
+>>>>>>> 878d04be79f231e53ef63c99c5527147f1e8eb97
         setState(() {
           isConnected = false;
           status = "Falha MQ: ${result?.state}";
