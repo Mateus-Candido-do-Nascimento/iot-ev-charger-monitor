@@ -1,12 +1,15 @@
 import 'dart:async';
 import 'dart:convert';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:mqtt_client/mqtt_client.dart';
 import 'package:mqtt_client/mqtt_server_client.dart';
+import 'package:mqtt_client/mqtt_browser_client.dart';
 
-/// Serviço MQTT para conexão com HiveMQ Cloud
+/// Serviço MQTT para conexão com diferentes brokers MQTT
 /// Gerencia conexão, subscrições e publicação de mensagens
 class MqttService {
-  late MqttServerClient client;
+  // Usa MqttBrowserClient para web e MqttServerClient para mobile
+  dynamic client;
   
   // Callbacks para notificar a UI sobre novos dados
   final StreamController<Map<String, dynamic>> _dataController = StreamController.broadcast();
@@ -24,12 +27,48 @@ class MqttService {
   bool get isConnected => _isConnected;
   
   // ===========================================================
-  // 📡 CONFIGURAÇÃO MQTT - Mesmas credenciais do ESP32
+  // 📡 CONFIGURAÇÃO MQTT - ESCOLHA O BROKER QUE DESEJA USAR
   // ===========================================================
-  static const String mqttServer = '76231e3f3c29478fb36525c03a0507ba.s1.eu.hivemq.cloud';
-  static const int mqttPort = 8883;
-  static const String mqttUser = 'mateus';
-  static const String mqttPassword = 'Mateus6615';
+  // OPÇÃO 1: EMQX Público (RECOMENDADO PARA WEB - tem WebSocket confiável)
+  // Não precisa de usuário/senha, funciona direto
+  // Para WEB: usa porta 8083 (WebSocket)
+  // Para MOBILE: usa porta 1883 (TCP)
+  static const String mqttServer = 'broker.emqx.io';
+  static const int mqttPortWeb = 8083;  // WebSocket para web (EMQX)
+  static const int mqttPortMobile = 1883;  // TCP para mobile
+  static const String mqttUser = '';  // Vazio para broker público
+  static const String mqttPassword = '';  // Vazio para broker público
+  static const bool useTLS = false;  // false = sem TLS (mais simples)
+  
+  // OPÇÃO 1B: Mosquitto Público (alternativa)
+  // Descomente para usar Mosquitto em vez de EMQX
+  // static const String mqttServer = 'test.mosquitto.org';
+  // static const int mqttPortWeb = 8080;  // WebSocket (pode não funcionar)
+  // static const int mqttPortMobile = 1883;  // TCP
+  
+  // OPÇÃO 2: HiveMQ Cloud (COM TLS - precisa de certificado)
+  // Descomente as linhas abaixo e comente as de cima para usar HiveMQ
+  // static const String mqttServer = '76231e3f3c29478fb36525c03a0507ba.s1.eu.hivemq.cloud';
+  // static const int mqttPort = 8883;
+  // static const String mqttUser = 'mateus';
+  // static const String mqttPassword = 'Mateus6615';
+  // static const bool useTLS = true;
+  
+  // OPÇÃO 3: EMQX Cloud (gratuito - https://www.emqx.com/en/cloud)
+  // Crie uma conta gratuita e use suas credenciais
+  // static const String mqttServer = 'broker.emqx.io';
+  // static const int mqttPort = 1883;  // ou 8883 para TLS
+  // static const String mqttUser = 'seu_usuario';
+  // static const String mqttPassword = 'sua_senha';
+  // static const bool useTLS = false;  // ou true para TLS
+  
+  // OPÇÃO 4: CloudMQTT (gratuito - https://www.cloudmqtt.com)
+  // Crie uma conta gratuita e use suas credenciais
+  // static const String mqttServer = 'seu_servidor.cloudmqtt.com';
+  // static const int mqttPort = 1883;  // ou 8883 para TLS
+  // static const String mqttUser = 'seu_usuario';
+  // static const String mqttPassword = 'sua_senha';
+  // static const bool useTLS = false;  // ou true para TLS
   
   // Tópicos MQTT
   static const String topicData = 'smart-charger/001/data';
@@ -40,36 +79,79 @@ class MqttService {
   /// Conecta ao broker MQTT
   Future<bool> connect() async {
     try {
-      // Cria cliente MQTT com TLS
-      client = MqttServerClient.withPort(mqttServer, '', mqttPort);
-      client.secure = true;
-      client.logging(on: false);
+      // Detecta se está rodando no web
+      final isWeb = kIsWeb;
+      final port = isWeb ? mqttPortWeb : mqttPortMobile;
+      final protocol = isWeb ? 'WebSocket' : 'TCP';
       
-      // Configura credenciais
+      print('🔌 Configurando conexão MQTT...');
+      print('   Plataforma: ${isWeb ? "Web" : "Mobile"}');
+      print('   Protocolo: $protocol');
+      print('   Servidor: $mqttServer');
+      print('   Porta: $port');
+      print('   TLS: $useTLS');
+      
+      // Cria cliente MQTT baseado na plataforma
+      if (isWeb) {
+        // Para WEB: usa WebSocket
+        // O MqttBrowserClient precisa da URL completa com protocolo e porta
+        final wsProtocol = useTLS ? 'wss' : 'ws';
+        // EMQX usa /mqtt como path para WebSocket
+        final wsUrl = '$wsProtocol://$mqttServer:$port/mqtt';
+        client = MqttBrowserClient(wsUrl, '');
+        print('   URL WebSocket: $wsUrl');
+      } else {
+        // Para MOBILE: usa TCP
+        client = MqttServerClient.withPort(mqttServer, '', port);
+        if (useTLS) {
+          client.secure = true;
+        } else {
+          client.secure = false;
+        }
+      }
+      
+      client.logging(on: true);  // Ativa logs para debug
       client.keepAlivePeriod = 20;
       client.onConnected = _onConnected;
       client.onDisconnected = _onDisconnected;
       client.onAutoReconnect = _onAutoReconnect;
       
-      // Configura autenticação
+      // Configura mensagem de conexão
       final connMessage = MqttConnectMessage()
           .withClientIdentifier('flutter_app_${DateTime.now().millisecondsSinceEpoch}')
           .startClean()
-          .withWillQos(MqttQos.atLeastOnce)
-          .authenticateAs(mqttUser, mqttPassword);
+          .withWillQos(MqttQos.atLeastOnce);
+      
+      // Adiciona autenticação apenas se usuário e senha foram fornecidos
+      if (mqttUser.isNotEmpty && mqttPassword.isNotEmpty) {
+        connMessage.authenticateAs(mqttUser, mqttPassword);
+        print('   Usuário: $mqttUser');
+      } else {
+        print('   Autenticação: Nenhuma (broker público)');
+      }
       
       client.connectionMessage = connMessage;
       
-      print('🔌 Conectando ao HiveMQ Cloud...');
+      print('🔌 Conectando ao broker MQTT...');
       
-      // Tenta conectar
-      await client.connect();
+      // Tenta conectar com timeout
+      try {
+        await client.connect().timeout(
+          const Duration(seconds: 10),
+          onTimeout: () {
+            throw TimeoutException('Timeout ao conectar ao broker MQTT');
+          },
+        );
+      } catch (e) {
+        print('❌ Erro durante conexão: $e');
+        rethrow;
+      }
       
-      // Se chegou aqui, está conectado
+      // Verifica status da conexão
       _isConnected = client.connectionStatus?.state == MqttConnectionState.connected;
       
       if (_isConnected) {
-        print('✅ Conectado ao HiveMQ!');
+        print('✅ Conectado ao broker MQTT!');
         _connectionController.add(true);
         
         // Subscreve aos tópicos
@@ -78,13 +160,16 @@ class MqttService {
         // Configura callback para receber mensagens
         client.updates?.listen(_onMessageReceived);
       } else {
-        print('❌ Falha ao conectar MQTT');
+        final status = client.connectionStatus?.state;
+        print('❌ Falha ao conectar MQTT. Status: $status');
+        print('   Código de erro: ${client.connectionStatus?.returnCode}');
         _connectionController.add(false);
       }
       
       return _isConnected;
-    } catch (e) {
+    } catch (e, stackTrace) {
       print('❌ Erro ao conectar MQTT: $e');
+      print('   Stack trace: $stackTrace');
       _connectionController.add(false);
       return false;
     }

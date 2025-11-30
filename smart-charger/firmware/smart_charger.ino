@@ -3,6 +3,7 @@
 // ===========================================================
 
 #include <WiFi.h>
+#include <WiFiClient.h>
 #include <WiFiClientSecure.h>
 #include <PubSubClient.h>
 #include <ArduinoJson.h>
@@ -15,8 +16,9 @@
 #define DISABLE_SAFETY true   // coloque false para reativar proteções automáticas
 
 // ===========================================================
-// 🔐 CERTIFICADO CA HIVEMQ CLOUD (ATUALIZADO) - mantido
+// 🔐 CERTIFICADO CA (apenas necessário se use_tls = true)
 // ===========================================================
+// Este certificado é necessário apenas para HiveMQ Cloud ou outros brokers com TLS
 const char* hive_ca_cert = R"EOF(
 -----BEGIN CERTIFICATE-----
 MIIFazCCA1OgAwIBAgIRAIIQz7DSQONZRGPgu2OCiwAwDQYJKoZIhvcNAQELBQAw
@@ -58,12 +60,31 @@ const char* ssid     = "Brasilino2G";
 const char* password = "42081467";
 
 // ===========================================================
-// ☁️ CONFIG MQTT REAL
+// ☁️ CONFIG MQTT - ESCOLHA O BROKER QUE DESEJA USAR
 // ===========================================================
-const char* mqtt_server   = "76231e3f3c29478fb36525c03a0507ba.s1.eu.hivemq.cloud";
-const int   mqtt_port     = 8883;
-const char* mqtt_user     = "mateus";
-const char* mqtt_password = "Mateus6615";
+// OPÇÃO 1: EMQX Público (RECOMENDADO - funciona bem com web e mobile)
+// Não precisa de usuário/senha, funciona direto
+const char* mqtt_server   = "broker.emqx.io";
+const int   mqtt_port     = 1883;
+const char* mqtt_user     = "";
+const char* mqtt_password = "";
+const bool  use_tls       = false;  // false = sem TLS
+
+// OPÇÃO 1B: Mosquitto Público (alternativa)
+// Descomente para usar Mosquitto em vez de EMQX
+// const char* mqtt_server   = "test.mosquitto.org";
+// const int   mqtt_port     = 1883;
+// const char* mqtt_user     = "";
+// const char* mqtt_password = "";
+// const bool  use_tls       = false;
+
+// OPÇÃO 2: HiveMQ Cloud (COM TLS - precisa de certificado)
+// Descomente as linhas abaixo e comente as de cima para usar HiveMQ
+// const char* mqtt_server   = "76231e3f3c29478fb36525c03a0507ba.s1.eu.hivemq.cloud";
+// const int   mqtt_port     = 8883;
+// const char* mqtt_user     = "mateus";
+// const char* mqtt_password = "Mateus6615";
+// const bool  use_tls       = true;  // true = com TLS
 
 // Tópicos
 const char* topic_data     = "smart-charger/001/data";
@@ -96,8 +117,9 @@ const float TENSAO_MAXIMA       = 250.0;
 // ===========================================================
 // 🔌 OBJETOS DE REDE
 // ===========================================================
-WiFiClientSecure espClient;
-PubSubClient mqttClient(espClient);
+WiFiClient espClientNormal;      // Para conexões sem TLS
+WiFiClientSecure espClientSecure; // Para conexões com TLS
+PubSubClient* mqttClient;        // Ponteiro para o cliente MQTT
 
 bool sistemaAtivo = true;
 bool emergencia = false;
@@ -114,8 +136,15 @@ void setup() {
 
   Serial.println("\nSMART CHARGER (FIRMWARE) - TRAVAS DESATIVADAS (SE APLICÁVEL) 🔌");
 
-  // configura CA para TLS
-  espClient.setCACert(hive_ca_cert);
+  // Configura cliente MQTT baseado no tipo de conexão
+  if (use_tls) {
+    espClientSecure.setCACert(hive_ca_cert);
+    mqttClient = new PubSubClient(espClientSecure);
+    Serial.println("🔐 TLS habilitado (certificado configurado)");
+  } else {
+    mqttClient = new PubSubClient(espClientNormal);
+    Serial.println("🔓 Conexão sem TLS (broker público)");
+  }
 
   inicializarSensores();
   conectarWiFi();
@@ -127,7 +156,7 @@ void setup() {
 // ===========================================================
 void loop() {
   verificarConexoes();
-  mqttClient.loop();
+  mqttClient->loop();
 
   if (sistemaAtivo && millis() - ultimoEnvio > intervaloEnvio) {
     publicarDadosReais();
@@ -185,17 +214,35 @@ void conectarWiFi() {
 }
 
 void conectarMQTT() {
-  Serial.println("\n🔌 Conectando ao HiveMQ...");
+  Serial.print("\n🔌 Conectando ao broker MQTT: ");
+  Serial.println(mqtt_server);
+  Serial.print("   Porta: ");
+  Serial.println(mqtt_port);
+  Serial.print("   TLS: ");
+  Serial.println(use_tls ? "Sim" : "Não");
 
-  mqttClient.setServer(mqtt_server, mqtt_port);
-  mqttClient.setCallback(mqttCallback);
+  mqttClient->setServer(mqtt_server, mqtt_port);
+  mqttClient->setCallback(mqttCallback);
 
-  if (mqttClient.connect("ESP32_SMART", mqtt_user, mqtt_password)) {
+  // Tenta conectar com ou sem autenticação
+  bool conectado = false;
+  if (strlen(mqtt_user) > 0 && strlen(mqtt_password) > 0) {
+    Serial.println("   Usando autenticação...");
+    conectado = mqttClient->connect("ESP32_SMART", mqtt_user, mqtt_password);
+  } else {
+    Serial.println("   Sem autenticação (broker público)...");
+    conectado = mqttClient->connect("ESP32_SMART");
+  }
+
+  if (conectado) {
     Serial.println("✅ MQTT conectado!");
-    mqttClient.subscribe(topic_controle);
+    mqttClient->subscribe(topic_controle);
+    Serial.print("   Inscrito no tópico: ");
+    Serial.println(topic_controle);
   } else {
     Serial.print("❌ Falha MQTT código: ");
-    Serial.println(mqttClient.state());
+    Serial.println(mqttClient->state());
+    Serial.println("   Verifique se o broker está acessível e as credenciais estão corretas");
   }
 }
 
@@ -203,7 +250,7 @@ void verificarConexoes() {
   if (WiFi.status() != WL_CONNECTED)
     conectarWiFi();
 
-  if (!mqttClient.connected())
+  if (!mqttClient->connected())
     conectarMQTT();
 }
 
@@ -245,7 +292,7 @@ void publicarAlerta(String tipo, String titulo, String texto) {
   String msg;
   serializeJson(doc, msg);
 
-  mqttClient.publish(topic_alertas, msg.c_str());
+  mqttClient->publish(topic_alertas, msg.c_str());
 
   Serial.println("\n🚨 ALERTA: " + titulo);
 }
@@ -292,7 +339,7 @@ void publicarDadosReais() {
   String msg;
   serializeJson(doc, msg);
 
-  mqttClient.publish(topic_data, msg.c_str());
+  mqttClient->publish(topic_data, msg.c_str());
 
   Serial.println("\n📤 DADOS ENVIADOS:");
   Serial.println(msg);
@@ -309,5 +356,5 @@ void publicarStatus(const char* st) {
   String msg;
   serializeJson(doc, msg);
 
-  mqttClient.publish(topic_status, msg.c_str());
+  mqttClient->publish(topic_status, msg.c_str());
 }
