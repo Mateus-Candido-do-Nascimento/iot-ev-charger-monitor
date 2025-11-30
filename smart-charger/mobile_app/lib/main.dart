@@ -43,4 +43,3 @@ class SmartChargerApp extends StatelessWidget {
     );
   }
 }
-
