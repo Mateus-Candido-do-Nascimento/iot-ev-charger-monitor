@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'dart:async';
+import 'pages/dashboard_page.dart';
+import 'services/mqtt_service.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -26,7 +28,12 @@ class _SplashScreenState extends State<SplashScreen>
     controller.forward();
 
     Timer(const Duration(seconds: 2), () {
-      Navigator.pushReplacementNamed(context, '/dashboard');
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(
+          builder: (context) => DashboardPage(mqttService: MqttService()),
+        ),
+      );
     });
   }
 
@@ -56,5 +63,11 @@ class _SplashScreenState extends State<SplashScreen>
         ),
       ),
     );
+  }
+
+  @override
+  void dispose() {
+    controller.dispose();
+    super.dispose();
   }
 }
