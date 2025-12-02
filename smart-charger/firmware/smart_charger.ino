@@ -56,8 +56,8 @@ emyPxgcYxn/eR44/KJ4EBs+lVDR3veyJm+kXQ99b21/+jh5Xos1AnX5iItreGCc=
 // ===========================================================
 // 📶 CONFIG Wi-Fi
 // ===========================================================
-const char* ssid     = "Brasilino2G";
-const char* password = "42081467";
+const char* ssid     = "";
+const char* password = "";
 
 // ===========================================================
 // ☁️ CONFIG MQTT - ESCOLHA O BROKER QUE DESEJA USAR
